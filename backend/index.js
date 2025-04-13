@@ -2,7 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const PinataSDK = require("@pinata/sdk");
 const { ethers } = require("ethers");
-require("dotenv").config();
+require("dotenv").config({ path: "/workspace/Data-Doc/.env" });
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
@@ -11,7 +11,7 @@ const provider = new ethers.JsonRpcProvider(
   `https://eth-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`
 );
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-const contractAddress = "0xD624121d86871E022E3674F45C43BBB30188033e";
+const contractAddress = "YOUR_SEPOLIA_CONTRACT_ADDRESS";
 const contractABI = [
   "function addDataset(string ipfsCid, string eigenDAId, uint256 price)",
   "function datasetCount() view returns (uint256)"
