@@ -54,7 +54,7 @@ app.get("/", (req, res) => {
   res.json({ status: "Backend running", env: process.env.PRIVATE_KEY ? "Key loaded" : "Key missing" });
 });
 
-// Fixed upload endpoint with proper file stream handling
+// Fixed upload endpoint with proper BigInt handling
 app.post("/upload", upload.single("dataset"), async (req, res) => {
   console.log("Upload request received:", req.file, req.body);
   try {
@@ -79,12 +79,33 @@ app.post("/upload", upload.single("dataset"), async (req, res) => {
     console.log("Pinned to IPFS:", IpfsHash);
     const storachaCid = "mock-storacha-" + Date.now();
     const eigenDAId = "mock-eigenda-" + Math.floor(Math.random() * 1000);
-    const price = ethers.parseUnits("1", 6);
+    
+    // Fix for BigInt error - use a string representation for price
+    const price = "1000000"; // 1 unit with 6 decimals
+    
+    // Log data being sent to contract
+    console.log("Sending to contract:", {
+      ipfsCid: IpfsHash,
+      eigenDAId: eigenDAId,
+      price: price
+    });
+    
     const tx = await contract.addDataset(IpfsHash, eigenDAId, price);
     console.log("Transaction sent:", tx.hash);
-    await tx.wait();
-    const datasetId = (await contract.datasetCount()) - 1;
-    res.json({ ipfsCid: IpfsHash, storachaCid, eigenDAId, datasetId });
+    const receipt = await tx.wait();
+    console.log("Transaction confirmed:", receipt);
+    
+    // Use Number() to avoid BigInt in response
+    const datasetCount = await contract.datasetCount();
+    const datasetId = Number(datasetCount) - 1;
+    
+    res.json({ 
+      ipfsCid: IpfsHash, 
+      storachaCid, 
+      eigenDAId, 
+      datasetId: datasetId.toString(),
+      transactionHash: tx.hash
+    });
   } catch (error) {
     console.error("Upload error:", error);
     res.status(500).json({ error: "Upload failed", details: error.message });
