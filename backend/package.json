@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "@pinata/sdk": "^2.1.0",
+    "@web3-storage/w3": "^2.8.0",
     "axios": "^1.8.4",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
