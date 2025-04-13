@@ -32,8 +32,7 @@ try {
 console.log("Direct env var check:");
 console.log("PINATA_API_KEY:", process.env.PINATA_API_KEY ? "Present (first few chars: " + process.env.PINATA_API_KEY.substring(0, 3) + "...)" : "Missing");
 console.log("PINATA_SECRET:", process.env.PINATA_SECRET ? "Present (first few chars: " + process.env.PINATA_SECRET.substring(0, 3) + "...)" : "Missing");
-console.log("PINATA_JWT:", process.env.PINATA_JWT ? "Present (first few chars: " + (process.env.PINATA_JWT?.substring(0, 3) + "...)" || "Missing"));
-
+console.log("PINATA_JWT:", process.env.PINATA_JWT ? "Present (first few chars: " + process.env.PINATA_JWT.substring(0, 3) + "...)" : "Missing");
 const app = express();
 
 console.log("Env vars:", {
