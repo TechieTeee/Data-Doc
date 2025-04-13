@@ -14,9 +14,7 @@ require("dotenv").config({ path: "/workspace/Data-Doc/.env" });
 
 const app = express();
 
-// Log env vars at startup
 console.log("Env vars at startup:", {
-  PINATA_JWT: process.env.PINATA_JWT ? `Present (first few chars: ${process.env.PINATA_JWT.substring(0, 3)}...)` : "Missing",
   PINATA_API_KEY: process.env.PINATA_API_KEY ? `Present (first few chars: ${process.env.PINATA_API_KEY.substring(0, 3)}...)` : "Missing",
   PINATA_SECRET: process.env.PINATA_SECRET ? `Present (first few chars: ${process.env.PINATA_SECRET.substring(0, 3)}...)` : "Missing",
   STORACHA_API_KEY: process.env.STORACHA_API_KEY ? `Present (first few chars: ${process.env.STORACHA_API_KEY.substring(0, 3)}...)` : "Missing",
@@ -50,17 +48,12 @@ app.use((req, res, next) => {
 const upload = multer({ dest: "uploads/" });
 let pinata, storacha;
 
-// Initialize Pinata
 try {
-  console.log("Attempting Pinata initialization...");
-  if (process.env.PINATA_JWT) {
-    pinata = new pinataSDK({ pinataJWT: process.env.PINATA_JWT });
-    console.log("Pinata SDK initialized with JWT");
-  } else if (process.env.PINATA_API_KEY && process.env.PINATA_SECRET) {
+  if (process.env.PINATA_API_KEY && process.env.PINATA_SECRET) {
     pinata = new pinataSDK(process.env.PINATA_API_KEY, process.env.PINATA_SECRET);
     console.log("Pinata SDK initialized with API Key/Secret");
   } else {
-    console.error("No Pinata credentials available");
+    console.log("Pinata credentials missing, skipping Pinata");
   }
   if (pinata) {
     pinata.testAuthentication().then((result) => {
@@ -74,7 +67,6 @@ try {
   pinata = null;
 }
 
-// Initialize Storacha
 try {
   if (process.env.STORACHA_API_KEY) {
     storacha = new Web3Storage({ token: process.env.STORACHA_API_KEY });
@@ -85,7 +77,6 @@ try {
   storacha = null;
 }
 
-// Initialize Akave
 let akaveApi;
 if (process.env.AKAVE_NODE_ADDRESS) {
   akaveApi = axios.create({
@@ -223,7 +214,6 @@ app.post("/upload", upload.single("dataset"), async (req, res) => {
     if (pinata) {
       try {
         console.log("Pinata upload attempt with credentials:", {
-          jwt: process.env.PINATA_JWT ? "Present" : "Missing",
           apiKey: process.env.PINATA_API_KEY ? "Present" : "Missing",
           secret: process.env.PINATA_SECRET ? "Present" : "Missing"
         });
