@@ -1,7 +1,8 @@
 const express = require("express");
 const multer = require("multer");
 const pinataSDK = require("@pinata/sdk");
-const { Web3Storage } = require("web3.storage");
+// Replace web3.storage with w3up-client
+const { create: createW3Client } = require("@web3-storage/w3up-client");
 const axios = require("axios");
 const FormData = require("form-data");
 const { ethers } = require("ethers");
@@ -17,7 +18,8 @@ const app = express();
 console.log("Env vars at startup:", {
   PINATA_API_KEY: process.env.PINATA_API_KEY ? `Present (first few chars: ${process.env.PINATA_API_KEY.substring(0, 3)}...)` : "Missing",
   PINATA_SECRET: process.env.PINATA_SECRET ? `Present (first few chars: ${process.env.PINATA_SECRET.substring(0, 3)}...)` : "Missing",
-  STORACHA_API_KEY: process.env.STORACHA_API_KEY ? `Present (first few chars: ${process.env.STORACHA_API_KEY.substring(0, 3)}...)` : "Missing",
+  STORACHA_EMAIL: process.env.STORACHA_EMAIL ? `Present (${process.env.STORACHA_EMAIL})` : "Missing",
+  STORACHA_SPACE_DID: process.env.STORACHA_SPACE_DID ? "Loaded" : "Missing",
   AKAVE_NODE_ADDRESS: process.env.AKAVE_NODE_ADDRESS ? "Loaded" : "Missing",
   ALCHEMY_API_KEY: process.env.ALCHEMY_API_KEY ? "Loaded" : "Missing",
   PRIVATE_KEY: process.env.PRIVATE_KEY ? "Loaded" : "Missing",
@@ -47,7 +49,7 @@ app.use((req, res, next) => {
 });
 
 const upload = multer({ dest: "uploads/" });
-let pinata, storacha;
+let pinata, storachaClient;
 
 try {
   if (process.env.PINATA_API_KEY && process.env.PINATA_SECRET) {
@@ -68,15 +70,30 @@ try {
   pinata = null;
 }
 
-try {
-  if (process.env.STORACHA_API_KEY) {
-    storacha = new Web3Storage({ token: process.env.STORACHA_API_KEY });
-    console.log("Storacha initialized");
+// Initialize web3.storage client with w3up-client
+async function initStorachaClient() {
+  try {
+    if (process.env.STORACHA_EMAIL) {
+      const client = await createW3Client();
+      await client.login(process.env.STORACHA_EMAIL);
+      
+      // If a space DID is provided, use it
+      if (process.env.STORACHA_SPACE_DID) {
+        await client.setCurrentSpace(process.env.STORACHA_SPACE_DID);
+      }
+      
+      console.log("Storacha w3up-client initialized and authenticated");
+      return client;
+    }
+    return null;
+  } catch (error) {
+    console.error("Storacha init failed:", error.message);
+    return null;
   }
-} catch (error) {
-  console.error("Storacha init failed:", error.message);
-  storacha = null;
 }
+
+// Initialize the Storacha client - we'll do this asynchronously
+let storachaClientPromise = initStorachaClient();
 
 let akaveApi;
 if (process.env.AKAVE_NODE_ADDRESS) {
@@ -182,12 +199,13 @@ async function generateZKP(datasetHash, uploaderKey) {
   }
 }
 
-app.get("/", (req, res) => {
+app.get("/", async (req, res) => {
+  const client = await storachaClientPromise;
   res.json({ 
     status: "Backend running", 
     features: {
       pinata: !!pinata,
-      storacha: !!storacha,
+      storacha: !!client,
       akave: !!akaveApi,
       blockchain: !!provider
     }
@@ -234,11 +252,14 @@ app.post("/upload", upload.single("dataset"), async (req, res) => {
     const datasetHash = crypto.createHash("sha256").update(datasetBuffer).digest("hex");
     console.log("Dataset hash:", datasetHash);
 
-    if (storacha) {
+    // Updated Storacha implementation
+    const client = await storachaClientPromise;
+    if (client) {
       try {
-        console.log("Storacha upload attempt...");
-        const file = new File([datasetBuffer], req.file.originalname || 'dataset.csv', { type: "text/csv" });
-        storachaCid = await storacha.put([file]);
+        console.log("Storacha upload attempt with w3up-client...");
+        const fileBlob = new Blob([datasetBuffer], { type: "text/csv" });
+        const uploadResult = await client.uploadFile(fileBlob);
+        storachaCid = uploadResult.cid.toString();
         console.log("Uploaded to Storacha:", storachaCid);
       } catch (storachaError) {
         console.error("Storacha upload failed:", storachaError.message, storachaError.stack);
