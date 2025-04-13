@@ -1,12 +1,11 @@
-require("@nomicfoundation/hardhat-toolbox");
-require("dotenv").config();
+const hre = require("hardhat");
 
-module.exports = {
-  solidity: "0.8.20",
-  networks: {
-    sepolia: {
-      url: `https://eth-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
-      accounts: [process.env.PRIVATE_KEY],
-    },
-  },
-};
+async function main() {
+  const usdcAddress = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"; // Sepolia USDC
+  const DataDocMarketplace = await hre.ethers.getContractFactory("DataDocMarketplace");
+  const marketplace = await DataDocMarketplace.deploy(usdcAddress);
+  await marketplace.deployed();
+  console.log("Deployed to Sepolia:", marketplace.address);
+}
+
+main().catch(console.error);
