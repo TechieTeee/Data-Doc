@@ -11,6 +11,29 @@ const snarkjs = require("snarkjs");
 const crypto = require("crypto");
 require("dotenv").config({ path: "/workspace/Data-Doc/.env" });
 
+// Alternative way to load env vars
+const dotenv = require('dotenv');
+try {
+  const envFilePath = '/workspace/Data-Doc/.env';
+  if (fs.existsSync(envFilePath)) {
+    const envConfig = dotenv.parse(fs.readFileSync(envFilePath));
+    for (const k in envConfig) {
+      process.env[k] = envConfig[k];
+    }
+    console.log("Loaded env vars manually");
+  } else {
+    console.error("Env file not found at:", envFilePath);
+  }
+} catch (envError) {
+  console.error("Error manually loading env vars:", envError);
+}
+
+// Direct env var check
+console.log("Direct env var check:");
+console.log("PINATA_API_KEY:", process.env.PINATA_API_KEY ? "Present (first few chars: " + process.env.PINATA_API_KEY.substring(0, 3) + "...)" : "Missing");
+console.log("PINATA_SECRET:", process.env.PINATA_SECRET ? "Present (first few chars: " + process.env.PINATA_SECRET.substring(0, 3) + "...)" : "Missing");
+console.log("PINATA_JWT:", process.env.PINATA_JWT ? "Present (first few chars: " + (process.env.PINATA_JWT?.substring(0, 3) + "...)" || "Missing"));
+
 const app = express();
 
 console.log("Env vars:", {
@@ -54,12 +77,28 @@ let pinata, storacha;
 
 // Initialize Pinata with either JWT or API Key/Secret depending on what's available
 try {
+  console.log("Initializing Pinata with:", {
+    hasJWT: !!process.env.PINATA_JWT,
+    hasAPIKey: !!process.env.PINATA_API_KEY,
+    hasSecret: !!process.env.PINATA_SECRET
+  });
+  
   if (process.env.PINATA_JWT) {
     pinata = new pinataSDK({ pinataJWT: process.env.PINATA_JWT });
-  } else {
+    console.log("Pinata SDK initialized with JWT");
+  } else if (process.env.PINATA_API_KEY && process.env.PINATA_SECRET) {
     pinata = new pinataSDK(process.env.PINATA_API_KEY, process.env.PINATA_SECRET);
+    console.log("Pinata SDK initialized with API Key/Secret");
+  } else {
+    throw new Error("No Pinata credentials available");
   }
-  console.log("Pinata SDK initialized");
+  
+  // Test Pinata connection
+  pinata.testAuthentication().then((result) => {
+    console.log("Pinata authentication test:", result);
+  }).catch((err) => {
+    console.error("Pinata authentication test failed:", err);
+  });
 } catch (error) {
   console.error("Pinata init failed:", error);
 }
@@ -235,9 +274,11 @@ app.post("/upload", upload.single("dataset"), async (req, res) => {
     
     // Pinata upload
     try {
+      console.log("Preparing to upload to Pinata. Pinata initialized:", !!pinata);
       const readableStreamForFile = fs.createReadStream(req.file.path);
       const pinataOptions = { pinataMetadata: { name: req.file.originalname || 'dataset.csv' } };
       
+      console.log("Uploading to Pinata with options:", pinataOptions);
       const pinataResult = await pinata.pinFileToIPFS(readableStreamForFile, pinataOptions);
       ipfsCid = pinataResult.IpfsHash || pinataResult.ipfsHash;
       console.log("Pinned to IPFS:", ipfsCid);
