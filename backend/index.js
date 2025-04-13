@@ -1,13 +1,13 @@
 const express = require("express");
 const multer = require("multer");
 const PinataSDK = require("@pinata/sdk");
-const ethers = require("ethers");
+const { ethers } = require("ethers");
 require("dotenv").config();
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
 const pinata = new PinataSDK(process.env.PINATA_API_KEY, process.env.PINATA_SECRET);
-const provider = new ethers.providers.JsonRpcProvider(
+const provider = new ethers.JsonRpcProvider(
   `https://eth-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`
 );
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
@@ -25,7 +25,7 @@ app.post("/upload", upload.single("dataset"), async (req, res) => {
     });
     const storachaCid = "mock-storacha-" + Date.now();
     const eigenDAId = "mock-eigenda-" + Math.floor(Math.random() * 1000);
-    const price = ethers.utils.parseUnits("1", 6);
+    const price = ethers.parseUnits("1", 6);
     const tx = await contract.addDataset(IpfsHash, eigenDAId, price);
     await tx.wait();
     const datasetId = (await contract.datasetCount()) - 1;
