@@ -1,24 +1,13 @@
-Direct env var check:
-PINATA_JWT: Present (first few chars: eyJ...)
-PINATA_API_KEY: Present (first few chars: 3fd...)
-PINATA_SECRET: Present (first few chars: 333...)
-STORACHA_API_KEY: Present (first few chars: MgC...)
-ALCHEMY_API_KEY: Loaded
-PRIVATE_KEY: Loaded
-Initializing Pinata with: { hasJWT: true, hasAPIKey: true, hasSecret: true }
-Pinata SDK initialized with JWT
-Storacha API key available: true
+Env vars at startup: {
+  PINATA_API_KEY: 'Present (first few chars: 3fd...)',
+  PINATA_SECRET: 'Present (first few chars: 333...)',
+  STORACHA_API_KEY: 'Present (first few chars: MgC...)',
+  AKAVE_NODE_ADDRESS: 'Loaded',
+  ALCHEMY_API_KEY: 'Loaded',
+  PRIVATE_KEY: 'Loaded'
+}
+Pinata SDK initialized with API Key/Secret
 Storacha initialized
 Akave API client created
 Backend listening on http://localhost:3001
-Pinata authentication test failed: Error: No credentials provided! Please provide your pinata api key and pinata secret api key or your pinata JWT key as an argument when you start this script
-    at createConfigForAxiosHeaders (/workspace/Data-Doc/backend/node_modules/@pinata/sdk/lib/pinata-sdk.js:24273:9)
-    at /workspace/Data-Doc/backend/node_modules/@pinata/sdk/lib/pinata-sdk.js:22930:99
-    at new Promise (<anonymous>)
-    at testAuthentication (/workspace/Data-Doc/backend/node_modules/@pinata/sdk/lib/pinata-sdk.js:22929:10)
-    at PinataClient.testAuthentication (/workspace/Data-Doc/backend/node_modules/@pinata/sdk/lib/pinata-sdk.js:24103:50)
-    at Object.<anonymous> (/workspace/Data-Doc/backend/index.js:72:10)
-    at Module._compile (node:internal/modules/cjs/loader:1562:14)
-    at Object..js (node:internal/modules/cjs/loader:1699:10)
-    at Module.load (node:internal/modules/cjs/loader:1313:32)
-    at Function._load (node:internal/modules/cjs/loader:1123:12)
+Pinata authentication test: { authenticated: true }

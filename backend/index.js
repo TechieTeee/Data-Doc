@@ -25,23 +25,24 @@ console.log("Env vars at startup:", {
 
 app.use((req, res, next) => {
   req.headers['x-forwarded-for'] = '127.0.0.1';
+  req.headers['x-gitpod-workspace-auth'] = 'bypass';
   if (!req.headers['origin']) {
     req.headers['origin'] = 'http://localhost:3000';
   }
-  console.log("Applied authentication bypass");
+  console.log("Applied auth bypass:", JSON.stringify(req.headers, null, 2));
   next();
 });
 
 app.use(cors({
-  origin: ["https://3000-techieteee-datadoc-0jtulr7q8pd.ws-us118.gitpod.io", "http://localhost:3000"],
+  origin: ["https://3000-techieteee-datadoc-0jtulr7q8pd.ws-us118.gitpod.io", "http://localhost:3000", "*"],
   methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type"],
+  allowedHeaders: ["Content-Type", "X-Gitpod-Workspace-Auth"],
   credentials: true
 }));
 
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  console.log("Headers:", JSON.stringify(req.headers));
+  console.log("Headers:", JSON.stringify(req.headers, null, 2));
   next();
 });
 
@@ -219,11 +220,12 @@ app.post("/upload", upload.single("dataset"), async (req, res) => {
         });
         const readableStreamForFile = fs.createReadStream(req.file.path);
         const pinataOptions = { pinataMetadata: { name: req.file.originalname || 'dataset.csv' } };
+        console.log("Calling pinFileToIPFS...");
         const pinataResult = await pinata.pinFileToIPFS(readableStreamForFile, pinataOptions);
         ipfsCid = pinataResult.IpfsHash || pinataResult.ipfsHash;
         console.log("Pinned to IPFS:", ipfsCid);
       } catch (pinataError) {
-        console.error("Pinata upload failed:", pinataError.message);
+        console.error("Pinata upload failed:", pinataError.message, pinataError.stack);
         ipfsCid = "pinata-upload-failed";
       }
     }
@@ -234,11 +236,12 @@ app.post("/upload", upload.single("dataset"), async (req, res) => {
 
     if (storacha) {
       try {
+        console.log("Storacha upload attempt...");
         const file = new File([datasetBuffer], req.file.originalname || 'dataset.csv', { type: "text/csv" });
         storachaCid = await storacha.put([file]);
         console.log("Uploaded to Storacha:", storachaCid);
       } catch (storachaError) {
-        console.error("Storacha upload failed:", storachaError.message);
+        console.error("Storacha upload failed:", storachaError.message, storachaError.stack);
         storachaCid = "storacha-upload-failed";
       }
     }
@@ -315,7 +318,7 @@ app.post("/upload", upload.single("dataset"), async (req, res) => {
       zkpProof
     });
   } catch (error) {
-    console.error("Upload error:", error.message);
+    console.error("Upload error:", error.message, error.stack);
     res.status(500).json({ error: "Upload failed", details: error.message });
   }
 });
