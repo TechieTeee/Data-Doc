@@ -8,6 +8,8 @@ const { ethers } = require("ethers");
 const cors = require("cors");
 const fs = require("fs");
 const stream = require("stream");
+const snarkjs = require("snarkjs");
+const crypto = require("crypto");
 require("dotenv").config({ path: "/workspace/Data-Doc/.env" });
 
 const app = express();
@@ -57,7 +59,7 @@ const provider = new ethers.JsonRpcProvider(
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 const contractAddress = "0xD624121d86871E022E3674F45C43BBB30188033e";
 const contractABI = [
-  "function addDataset(string ipfsCid, string eigenDAId, uint256 price)",
+  "function addDataset(string ipfsCid, string eigenDAId, uint256 price, string zkpProof, string metadataCid) returns (uint256)",
   "function datasetCount() view returns (uint256)",
 ];
 const contract = new ethers.Contract(contractAddress, contractABI, wallet);
@@ -72,7 +74,7 @@ async function streamToAkave(filePath, fileName) {
     // Stream chunks
     const fileStream = fs.createReadStream(filePath);
     let chunkIndex = 0;
-    const chunkSize = 32 * 1024 * 1024; // 32MB
+    const chunkSize = 32 * 1024 * 1024;
     let buffer = Buffer.alloc(0);
 
     const uploadChunk = async (chunk) => {
@@ -102,7 +104,6 @@ async function streamToAkave(filePath, fileName) {
         if (buffer.length > 0) {
           await uploadChunk(buffer);
         }
-        // Commit upload
         const commitResponse = await akaveApi.post(`/buckets/data_doc/files/${uploadId}/commit`, {});
         console.log("Akave upload committed:", commitResponse.data.cid);
         resolve(commitResponse.data.cid);
@@ -113,7 +114,26 @@ async function streamToAkave(filePath, fileName) {
     return commitResponse.data.cid || "akave-stream-" + Date.now();
   } catch (error) {
     console.error("Akave streaming failed:", error.message);
+    if (error.response?.data?.includes("bucket")) {
+      console.error("Ensure bucket 'data_doc' exists");
+    }
     return "akave-failed-" + Date.now();
+  }
+}
+
+async function generateZKP(datasetHash, uploaderKey) {
+  const input = { datasetHash, uploaderKey: ethers.toBigInt(uploaderKey).toString() };
+  fs.writeFileSync("circuits/input.json", JSON.stringify(input));
+  try {
+    const { proof } = await snarkjs.groth16.fullProve(
+      input,
+      "circuits/datasetProof.wasm",
+      "circuits/datasetProof_0001.zkey"
+    );
+    return JSON.stringify(proof);
+  } catch (error) {
+    console.error("ZKP generation failed:", error);
+    return "";
   }
 }
 
@@ -148,11 +168,33 @@ app.post("/upload", upload.single("dataset"), async (req, res) => {
     const storachaCid = await storacha.put([file]);
     console.log("Uploaded to Storacha:", storachaCid);
 
+    // Dataset hash
+    const datasetBuffer = fs.readFileSync(req.file.path);
+    const datasetHash = crypto.createHash("sha256").update(datasetBuffer).digest("hex");
+
+    // Croissant-like metadata
+    const metadata = {
+      "@context": "http://schema.org",
+      "@type": "Dataset",
+      name: req.file.originalname,
+      creator: { "@type": "Person", identifier: wallet.address },
+      datePublished: new Date().toISOString(),
+      contentHash: datasetHash,
+      ipfsCid,
+      akaveCid,
+      storachaCid,
+    };
+    const metadataCid = await pinata.pinJSONToIPFS(metadata, { pinataMetadata: { name: "dataset_metadata.json" } });
+    console.log("Metadata pinned to Pinata:", metadataCid.IpfsHash);
+
+    // Generate ZKP
+    const zkpProof = await generateZKP(datasetHash, process.env.PRIVATE_KEY);
+
+    // Contract interaction
     const eigenDAId = "mock-eigenda-" + Math.floor(Math.random() * 1000);
     const price = "1000000";
-
-    console.log("Sending to contract:", { ipfsCid, eigenDAId, price });
-    const tx = await contract.addDataset(ipfsCid, eigenDAId, price);
+    console.log("Sending to contract:", { ipfsCid, eigenDAId, price, zkpProof, metadataCid: metadataCid.IpfsHash });
+    const tx = await contract.addDataset(ipfsCid, eigenDAId, price, zkpProof, metadataCid.IpfsHash);
     console.log("Transaction sent:", tx.hash);
     const receipt = await tx.wait();
     console.log("Transaction confirmed:", receipt);
@@ -167,6 +209,8 @@ app.post("/upload", upload.single("dataset"), async (req, res) => {
       eigenDAId,
       datasetId: datasetId.toString(),
       transactionHash: tx.hash,
+      metadataCid: metadataCid.IpfsHash,
+      zkpProof,
     });
   } catch (error) {
     console.error("Upload error:", error);
