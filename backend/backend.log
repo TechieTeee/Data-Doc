@@ -1,22 +1,24 @@
-node:internal/modules/cjs/loader:1247
-  throw err;
-  ^
-
-Error: Cannot find module '@web3-storage/w3'
-Require stack:
-- /workspace/Data-Doc/backend/index.js
-    at Function._resolveFilename (node:internal/modules/cjs/loader:1244:15)
-    at Function._load (node:internal/modules/cjs/loader:1070:27)
-    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
-    at wrapModuleLoad (node:internal/modules/cjs/loader:217:24)
-    at Module.require (node:internal/modules/cjs/loader:1335:12)
-    at require (node:internal/modules/helpers:136:16)
-    at Object.<anonymous> (/workspace/Data-Doc/backend/index.js:4:25)
+Direct env var check:
+PINATA_JWT: Present (first few chars: eyJ...)
+PINATA_API_KEY: Present (first few chars: 3fd...)
+PINATA_SECRET: Present (first few chars: 333...)
+STORACHA_API_KEY: Present (first few chars: MgC...)
+ALCHEMY_API_KEY: Loaded
+PRIVATE_KEY: Loaded
+Initializing Pinata with: { hasJWT: true, hasAPIKey: true, hasSecret: true }
+Pinata SDK initialized with JWT
+Storacha API key available: true
+Storacha initialized
+Akave API client created
+Backend listening on http://localhost:3001
+Pinata authentication test failed: Error: No credentials provided! Please provide your pinata api key and pinata secret api key or your pinata JWT key as an argument when you start this script
+    at createConfigForAxiosHeaders (/workspace/Data-Doc/backend/node_modules/@pinata/sdk/lib/pinata-sdk.js:24273:9)
+    at /workspace/Data-Doc/backend/node_modules/@pinata/sdk/lib/pinata-sdk.js:22930:99
+    at new Promise (<anonymous>)
+    at testAuthentication (/workspace/Data-Doc/backend/node_modules/@pinata/sdk/lib/pinata-sdk.js:22929:10)
+    at PinataClient.testAuthentication (/workspace/Data-Doc/backend/node_modules/@pinata/sdk/lib/pinata-sdk.js:24103:50)
+    at Object.<anonymous> (/workspace/Data-Doc/backend/index.js:72:10)
     at Module._compile (node:internal/modules/cjs/loader:1562:14)
     at Object..js (node:internal/modules/cjs/loader:1699:10)
-    at Module.load (node:internal/modules/cjs/loader:1313:32) {
-  code: 'MODULE_NOT_FOUND',
-  requireStack: [ '/workspace/Data-Doc/backend/index.js' ]
-}
-
-Node.js v22.13.1
+    at Module.load (node:internal/modules/cjs/loader:1313:32)
+    at Function._load (node:internal/modules/cjs/loader:1123:12)

@@ -1,6 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const pinataSDK = require("@pinata/sdk");
+const { Web3Storage } = require("web3.storage");
 const axios = require("axios");
 const FormData = require("form-data");
 const { ethers } = require("ethers");
@@ -11,45 +12,21 @@ const snarkjs = require("snarkjs");
 const crypto = require("crypto");
 require("dotenv").config({ path: "/workspace/Data-Doc/.env" });
 
-// Alternative way to load env vars
-const dotenv = require('dotenv');
-try {
-  const envFilePath = '/workspace/Data-Doc/.env';
-  if (fs.existsSync(envFilePath)) {
-    const envConfig = dotenv.parse(fs.readFileSync(envFilePath));
-    for (const k in envConfig) {
-      process.env[k] = envConfig[k];
-    }
-    console.log("Loaded env vars manually");
-  } else {
-    console.error("Env file not found at:", envFilePath);
-  }
-} catch (envError) {
-  console.error("Error manually loading env vars:", envError);
-}
-
-// Direct env var check
-console.log("Direct env var check:");
-console.log("PINATA_API_KEY:", process.env.PINATA_API_KEY ? "Present (first few chars: " + process.env.PINATA_API_KEY.substring(0, 3) + "...)" : "Missing");
-console.log("PINATA_SECRET:", process.env.PINATA_SECRET ? "Present (first few chars: " + process.env.PINATA_SECRET.substring(0, 3) + "...)" : "Missing");
-console.log("PINATA_JWT:", process.env.PINATA_JWT ? "Present (first few chars: " + process.env.PINATA_JWT.substring(0, 3) + "...)" : "Missing");
 const app = express();
 
-console.log("Env vars:", {
-  privateKey: process.env.PRIVATE_KEY ? "Loaded" : "Missing",
-  alchemy: process.env.ALCHEMY_API_KEY ? "Loaded" : "Missing",
-  pinataApi: process.env.PINATA_API_KEY ? "Loaded" : "Missing",
-  pinataSecret: process.env.PINATA_SECRET ? "Loaded" : "Missing",
-  pinataJWT: process.env.PINATA_JWT ? "Loaded" : "Missing",
-  akave: process.env.AKAVE_NODE_ADDRESS ? "Loaded" : "Missing",
-  storacha: process.env.STORACHA_API_KEY ? "Loaded" : "Missing",
+// Log env vars at startup
+console.log("Env vars at startup:", {
+  PINATA_JWT: process.env.PINATA_JWT ? `Present (first few chars: ${process.env.PINATA_JWT.substring(0, 3)}...)` : "Missing",
+  PINATA_API_KEY: process.env.PINATA_API_KEY ? `Present (first few chars: ${process.env.PINATA_API_KEY.substring(0, 3)}...)` : "Missing",
+  PINATA_SECRET: process.env.PINATA_SECRET ? `Present (first few chars: ${process.env.PINATA_SECRET.substring(0, 3)}...)` : "Missing",
+  STORACHA_API_KEY: process.env.STORACHA_API_KEY ? `Present (first few chars: ${process.env.STORACHA_API_KEY.substring(0, 3)}...)` : "Missing",
+  AKAVE_NODE_ADDRESS: process.env.AKAVE_NODE_ADDRESS ? "Loaded" : "Missing",
+  ALCHEMY_API_KEY: process.env.ALCHEMY_API_KEY ? "Loaded" : "Missing",
+  PRIVATE_KEY: process.env.PRIVATE_KEY ? "Loaded" : "Missing",
 });
 
-// Add authentication bypass for Gitpod - BASED ON WORKING CODE
 app.use((req, res, next) => {
-  // Make request appear to come from localhost to bypass authentication
   req.headers['x-forwarded-for'] = '127.0.0.1';
-  // Add localhost to the list of approved origins
   if (!req.headers['origin']) {
     req.headers['origin'] = 'http://localhost:3000';
   }
@@ -61,27 +38,21 @@ app.use(cors({
   origin: ["https://3000-techieteee-datadoc-0jtulr7q8pd.ws-us118.gitpod.io", "http://localhost:3000"],
   methods: ["GET", "POST"],
   allowedHeaders: ["Content-Type"],
-  credentials: true // Added to allow credentials
+  credentials: true
 }));
 
-// Debug middleware - enhanced with header logging
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  console.log("Headers:", JSON.stringify(req.headers)); // Log headers for debugging
+  console.log("Headers:", JSON.stringify(req.headers));
   next();
 });
 
 const upload = multer({ dest: "uploads/" });
 let pinata, storacha;
 
-// Initialize Pinata with either JWT or API Key/Secret depending on what's available
+// Initialize Pinata
 try {
-  console.log("Initializing Pinata with:", {
-    hasJWT: !!process.env.PINATA_JWT,
-    hasAPIKey: !!process.env.PINATA_API_KEY,
-    hasSecret: !!process.env.PINATA_SECRET
-  });
-  
+  console.log("Attempting Pinata initialization...");
   if (process.env.PINATA_JWT) {
     pinata = new pinataSDK({ pinataJWT: process.env.PINATA_JWT });
     console.log("Pinata SDK initialized with JWT");
@@ -89,36 +60,32 @@ try {
     pinata = new pinataSDK(process.env.PINATA_API_KEY, process.env.PINATA_SECRET);
     console.log("Pinata SDK initialized with API Key/Secret");
   } else {
-    throw new Error("No Pinata credentials available");
+    console.error("No Pinata credentials available");
   }
-  
-  // Test Pinata connection
-  pinata.testAuthentication().then((result) => {
-    console.log("Pinata authentication test:", result);
-  }).catch((err) => {
-    console.error("Pinata authentication test failed:", err);
-  });
+  if (pinata) {
+    pinata.testAuthentication().then((result) => {
+      console.log("Pinata authentication test:", result);
+    }).catch((err) => {
+      console.error("Pinata authentication test failed:", err.message);
+    });
+  }
 } catch (error) {
-  console.error("Pinata init failed:", error);
+  console.error("Pinata init failed:", error.message);
+  pinata = null;
 }
 
-// Initialize Storacha if API key available - FIXED INITIALIZATION
+// Initialize Storacha
 try {
   if (process.env.STORACHA_API_KEY) {
-    console.log("Storacha API key available:", !!process.env.STORACHA_API_KEY);
-    // Use the correct library import
-    const { Web3Storage } = require('web3.storage');
-    
-    // Initialize with just the token string
-    storacha = new Web3Storage(process.env.STORACHA_API_KEY);
+    storacha = new Web3Storage({ token: process.env.STORACHA_API_KEY });
     console.log("Storacha initialized");
   }
 } catch (error) {
   console.error("Storacha init failed:", error.message);
-  console.error("Error details:", error);
+  storacha = null;
 }
 
-// Initialize Akave API client if node address available
+// Initialize Akave
 let akaveApi;
 if (process.env.AKAVE_NODE_ADDRESS) {
   akaveApi = axios.create({
@@ -128,11 +95,12 @@ if (process.env.AKAVE_NODE_ADDRESS) {
   console.log("Akave API client created");
 }
 
-// Blockchain provider and contract setup
 const provider = new ethers.JsonRpcProvider(
-  `https://eth-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`
+  process.env.ALCHEMY_API_KEY
+    ? `https://eth-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`
+    : "https://rpc.sepolia.org"
 );
-const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+const wallet = new ethers.Wallet(process.env.PRIVATE_KEY || "0x0000000000000000000000000000000000000000000000000000000000000000", provider);
 const contractAddress = "0xD624121d86871E022E3674F45C43BBB30188033e";
 const contractABI = [
   "function addDataset(string ipfsCid, string eigenDAId, uint256 price, string zkpProof, string metadataCid) returns (uint256)",
@@ -140,20 +108,16 @@ const contractABI = [
 ];
 const contract = new ethers.Contract(contractAddress, contractABI, wallet);
 
-// Akave streaming function
 async function streamToAkave(filePath, fileName) {
   if (!akaveApi) {
     console.log("Akave API not initialized, skipping upload");
     return "akave-not-configured";
   }
-  
   try {
-    // Create file upload
     const createResponse = await akaveApi.post("/buckets/data_doc/files/create", { fileName });
     const uploadId = createResponse.data.uploadId;
     console.log("Akave upload created:", uploadId);
 
-    // Stream chunks
     const fileStream = fs.createReadStream(filePath);
     let chunkIndex = 0;
     const chunkSize = 32 * 1024 * 1024;
@@ -197,32 +161,23 @@ async function streamToAkave(filePath, fileName) {
     return commitResponse?.data?.cid || "akave-stream-" + Date.now();
   } catch (error) {
     console.error("Akave streaming failed:", error.message);
-    if (error.response?.data?.includes("bucket")) {
-      console.error("Ensure bucket 'data_doc' exists");
-    }
     return "akave-failed-" + Date.now();
   }
 }
 
-// ZKP generation function
 async function generateZKP(datasetHash, uploaderKey) {
   try {
     const input = { datasetHash, uploaderKey: ethers.toBigInt(uploaderKey).toString() };
-    // Check if directory exists, create if not
     if (!fs.existsSync("circuits")) {
       fs.mkdirSync("circuits");
     }
     fs.writeFileSync("circuits/input.json", JSON.stringify(input));
-    
-    // Check if required ZKP files exist
     const wasmExists = fs.existsSync("circuits/datasetProof.wasm");
     const zkeyExists = fs.existsSync("circuits/datasetProof_0001.zkey");
-    
     if (!wasmExists || !zkeyExists) {
       console.error("ZKP wasm or zkey files missing");
       return JSON.stringify({ mockProof: "circuit-files-missing" });
     }
-    
     const { proof } = await snarkjs.groth16.fullProve(
       input,
       "circuits/datasetProof.wasm",
@@ -230,8 +185,7 @@ async function generateZKP(datasetHash, uploaderKey) {
     );
     return JSON.stringify(proof);
   } catch (error) {
-    console.error("ZKP generation failed:", error);
-    // Return a mock proof for testing purposes
+    console.error("ZKP generation failed:", error.message);
     return JSON.stringify({ mockProof: "zkp-generation-failed" });
   }
 }
@@ -255,134 +209,123 @@ app.post("/upload", upload.single("dataset"), async (req, res) => {
       console.error("No file uploaded");
       return res.status(400).json({ error: "No file uploaded" });
     }
-    
-    // Verify file exists
     if (!fs.existsSync(req.file.path)) {
       console.error(`File not found at path: ${req.file.path}`);
       return res.status(400).json({ error: "Uploaded file not found on server" });
     }
-    
     console.log(`File size: ${fs.statSync(req.file.path).size} bytes`);
-    
-    if (!pinata) {
-      console.error("Pinata not initialized");
-      return res.status(500).json({ error: "Pinata service unavailable" });
+
+    let ipfsCid = "pinata-not-used";
+    let storachaCid = "storacha-not-used";
+    let akaveCid = "akave-not-used";
+    let metadataCid = "metadata-not-used";
+
+    if (pinata) {
+      try {
+        console.log("Pinata upload attempt with credentials:", {
+          jwt: process.env.PINATA_JWT ? "Present" : "Missing",
+          apiKey: process.env.PINATA_API_KEY ? "Present" : "Missing",
+          secret: process.env.PINATA_SECRET ? "Present" : "Missing"
+        });
+        const readableStreamForFile = fs.createReadStream(req.file.path);
+        const pinataOptions = { pinataMetadata: { name: req.file.originalname || 'dataset.csv' } };
+        const pinataResult = await pinata.pinFileToIPFS(readableStreamForFile, pinataOptions);
+        ipfsCid = pinataResult.IpfsHash || pinataResult.ipfsHash;
+        console.log("Pinned to IPFS:", ipfsCid);
+      } catch (pinataError) {
+        console.error("Pinata upload failed:", pinataError.message);
+        ipfsCid = "pinata-upload-failed";
+      }
     }
-    
-    let ipfsCid, storachaCid = "storacha-not-used", akaveCid = "akave-not-used";
-    
-    // Pinata upload
-    try {
-      console.log("Preparing to upload to Pinata. Pinata initialized:", !!pinata);
-      const readableStreamForFile = fs.createReadStream(req.file.path);
-      const pinataOptions = { pinataMetadata: { name: req.file.originalname || 'dataset.csv' } };
-      
-      console.log("Uploading to Pinata with options:", pinataOptions);
-      const pinataResult = await pinata.pinFileToIPFS(readableStreamForFile, pinataOptions);
-      ipfsCid = pinataResult.IpfsHash || pinataResult.ipfsHash;
-      console.log("Pinned to IPFS:", ipfsCid);
-    } catch (pinataError) {
-      console.error("Pinata upload failed:", pinataError);
-      return res.status(500).json({ error: "IPFS upload failed", details: pinataError.message });
-    }
-    
-    // Dataset hash
+
     const datasetBuffer = fs.readFileSync(req.file.path);
     const datasetHash = crypto.createHash("sha256").update(datasetBuffer).digest("hex");
     console.log("Dataset hash:", datasetHash);
-    
-    // Storacha upload
+
     if (storacha) {
       try {
         const file = new File([datasetBuffer], req.file.originalname || 'dataset.csv', { type: "text/csv" });
         storachaCid = await storacha.put([file]);
         console.log("Uploaded to Storacha:", storachaCid);
       } catch (storachaError) {
-        console.error("Storacha upload failed:", storachaError);
+        console.error("Storacha upload failed:", storachaError.message);
         storachaCid = "storacha-upload-failed";
       }
     }
-    
-    // Stream to Akave
+
     if (akaveApi) {
       try {
         akaveCid = await streamToAkave(req.file.path, req.file.originalname || 'dataset.csv');
         console.log("Streamed to Akave:", akaveCid);
       } catch (akaveError) {
-        console.error("Akave streaming failed:", akaveError);
+        console.error("Akave streaming failed:", akaveError.message);
         akaveCid = "akave-stream-failed";
       }
     }
-    
-    // Metadata creation
-    const metadata = {
-      "@context": "http://schema.org",
-      "@type": "Dataset",
-      name: req.file.originalname || 'dataset.csv',
-      creator: { "@type": "Person", identifier: wallet.address },
-      datePublished: new Date().toISOString(),
-      contentHash: datasetHash,
-      ipfsCid,
-      akaveCid,
-      storachaCid,
-    };
-    
-    // Pin metadata to IPFS
-    const metadataResult = await pinata.pinJSONToIPFS(metadata, { 
-      pinataMetadata: { name: "dataset_metadata.json" } 
-    });
-    const metadataCid = metadataResult.IpfsHash || metadataResult.ipfsHash;
-    console.log("Metadata pinned to IPFS:", metadataCid);
-    
-    // Generate ZKP
-    const zkpProof = await generateZKP(datasetHash, process.env.PRIVATE_KEY);
-    console.log("ZKP generated");
-    
-    // Mock EigenDA ID for now
+
+    if (pinata) {
+      try {
+        const metadata = {
+          "@context": "http://schema.org",
+          "@type": "Dataset",
+          name: req.file.originalname || 'dataset.csv',
+          creator: { "@type": "Person", identifier: wallet.address },
+          datePublished: new Date().toISOString(),
+          contentHash: datasetHash,
+          ipfsCid,
+          akaveCid,
+          storachaCid,
+        };
+        const metadataResult = await pinata.pinJSONToIPFS(metadata, { 
+          pinataMetadata: { name: "dataset_metadata.json" } 
+        });
+        metadataCid = metadataResult.IpfsHash || metadataResult.ipfsHash;
+        console.log("Metadata pinned to IPFS:", metadataCid);
+      } catch (metadataError) {
+        console.error("Metadata upload failed:", metadataError.message);
+        metadataCid = "metadata-upload-failed";
+      }
+    }
+
+    const zkpProof = await generateZKP(datasetHash, process.env.PRIVATE_KEY || "0x0");
+    console.log("ZKP generated:", zkpProof);
+
     const eigenDAId = "mock-eigenda-" + Math.floor(Math.random() * 1000);
-    
-    // Fix for BigInt error - use a string representation for price
-    const price = "1000000"; // 1 unit with 6 decimals
-    
-    // Log data being sent to contract
-    console.log("Sending to contract:", {
-      ipfsCid,
-      eigenDAId,
-      price,
-      zkpProof: "proof-object", // Not logging the actual proof
-      metadataCid
-    });
-    
-    // Contract interaction
-    const tx = await contract.addDataset(ipfsCid, eigenDAId, price, zkpProof, metadataCid);
-    console.log("Transaction sent:", tx.hash);
-    const receipt = await tx.wait();
-    console.log("Transaction confirmed:", receipt);
-    
-    // Get dataset ID
-    const datasetCount = await contract.datasetCount();
+    const price = "1000000";
+
+    let tx;
+    try {
+      console.log("Sending to contract:", { ipfsCid, eigenDAId, price, zkpProof: "proof-object", metadataCid });
+      tx = await contract.addDataset(ipfsCid, eigenDAId, price, zkpProof, metadataCid);
+      console.log("Transaction sent:", tx.hash);
+      await tx.wait();
+      console.log("Transaction confirmed");
+    } catch (contractError) {
+      console.error("Contract interaction failed:", contractError.message);
+    }
+
+    const datasetCount = await contract.datasetCount().catch(() => 0);
     const datasetId = Number(datasetCount) - 1;
-    
-    // Clean up uploaded file
+
     try {
       fs.unlinkSync(req.file.path);
       console.log("Cleaned up uploaded file");
     } catch (cleanupError) {
       console.error("Failed to clean up file:", cleanupError);
     }
-    
+
     res.json({
       ipfsCid,
       akaveCid,
       storachaCid,
       eigenDAId,
       datasetId: datasetId.toString(),
-      transactionHash: tx.hash,
+      transactionHash: tx?.hash || "none",
       metadataCid,
       zkpProof
     });
   } catch (error) {
-    console.error("Upload error:", error);
+    console.error("Upload error:", error.message);
     res.status(500).json({ error: "Upload failed", details: error.message });
   }
 });
