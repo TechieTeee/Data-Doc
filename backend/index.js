@@ -7,15 +7,20 @@ require("dotenv").config({ path: "/workspace/Data-Doc/.env" });
 
 const app = express();
 
-// Enable CORS for all routes
+// Log environment variables (for debugging)
+console.log("Env vars:", {
+  privateKey: process.env.PRIVATE_KEY ? "Loaded" : "Missing",
+  alchemy: process.env.ALCHEMY_API_KEY ? "Loaded" : "Missing",
+  pinataApi: process.env.PINATA_API_KEY ? "Loaded" : "Missing",
+  pinataSecret: process.env.PINATA_SECRET ? "Loaded" : "Missing"
+});
+
+// Enable CORS
 app.use(cors({
   origin: ["https://3000-techieteee-datadoc-0jtulr7q8pd.ws-us118.gitpod.io", "http://localhost:3000"],
   methods: ["GET", "POST"],
   allowedHeaders: ["Content-Type"]
 }));
-
-// Multer for file uploads
-const upload = multer({ dest: "uploads/" });
 
 // Debug middleware
 app.use((req, res, next) => {
@@ -23,7 +28,15 @@ app.use((req, res, next) => {
   next();
 });
 
-const pinata = new PinataSDK(process.env.PINATA_API_KEY, process.env.PINATA_SECRET);
+const upload = multer({ dest: "uploads/" });
+let pinata;
+try {
+  pinata = new PinataSDK(process.env.PINATA_API_KEY, process.env.PINATA_SECRET);
+  console.log("Pinata SDK initialized");
+} catch (error) {
+  console.error("Pinata init failed:", error);
+}
+
 const provider = new ethers.JsonRpcProvider(
   `https://eth-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`
 );
@@ -46,6 +59,10 @@ app.post("/upload", upload.single("dataset"), async (req, res) => {
     if (!req.file) {
       console.error("No file uploaded");
       return res.status(400).json({ error: "No file uploaded" });
+    }
+    if (!pinata) {
+      console.error("Pinata not initialized");
+      return res.status(500).json({ error: "Pinata service unavailable" });
     }
     const { IpfsHash } = await pinata.pinFileToIPFS(req.file.path, {
       pinataMetadata: { name: req.file.originalname }
