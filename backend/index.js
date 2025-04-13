@@ -3,6 +3,7 @@ const multer = require("multer");
 const PinataSDK = require("@pinata/sdk");
 const { ethers } = require("ethers");
 const cors = require("cors");
+const fs = require('fs');
 require("dotenv").config({ path: "/workspace/Data-Doc/.env" });
 
 const app = express();
@@ -53,6 +54,7 @@ app.get("/", (req, res) => {
   res.json({ status: "Backend running", env: process.env.PRIVATE_KEY ? "Key loaded" : "Key missing" });
 });
 
+// Fixed upload endpoint with proper file stream handling
 app.post("/upload", upload.single("dataset"), async (req, res) => {
   console.log("Upload request received:", req.file, req.body);
   try {
@@ -64,9 +66,16 @@ app.post("/upload", upload.single("dataset"), async (req, res) => {
       console.error("Pinata not initialized");
       return res.status(500).json({ error: "Pinata service unavailable" });
     }
-    const { IpfsHash } = await pinata.pinFileToIPFS(req.file.path, {
+    
+    // Use a readable stream from the file
+    const readableStreamForFile = fs.createReadStream(req.file.path);
+    
+    const pinataOptions = {
       pinataMetadata: { name: req.file.originalname }
-    });
+    };
+    
+    const { IpfsHash } = await pinata.pinFileToIPFS(readableStreamForFile, pinataOptions);
+    
     console.log("Pinned to IPFS:", IpfsHash);
     const storachaCid = "mock-storacha-" + Date.now();
     const eigenDAId = "mock-eigenda-" + Math.floor(Math.random() * 1000);
