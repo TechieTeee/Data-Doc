@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.0;
 
 interface IERC20 {
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
 }
 
 contract DataDocMarketplace {
-    IERC20 public usdc = IERC20(0x9999f7fEA5938fD3b1E26A12c3f2D98ECdaB2007); // Mumbai USDC
+    IERC20 public usdc; // No initialization
     address public feeCollector;
     uint256 public feePercentage = 10;
 
@@ -14,7 +14,7 @@ contract DataDocMarketplace {
         string ipfsCid;
         string eigenDAId;
         address contributor;
-        uint256 price; // USDC in 6 decimals
+        uint256 price;
         bool validated;
     }
 
@@ -24,12 +24,13 @@ contract DataDocMarketplace {
     event DatasetAdded(uint256 id, string ipfsCid, string eigenDAId, address contributor);
     event DatasetForked(uint256 id, address forker, uint256 amount);
 
-    constructor() {
+    constructor(address usdcAddress) {
         feeCollector = msg.sender;
+        usdc = IERC20(usdcAddress);
     }
 
     function addDataset(string memory ipfsCid, string memory eigenDAId, uint256 price) external {
-        datasets[datasetCount] = Dataset(ipfsCid, eigenDAId, msg.sender, price, true); // Mock validation
+        datasets[datasetCount] = Dataset(ipfsCid, eigenDAId, msg.sender, price, true);
         emit DatasetAdded(datasetCount, ipfsCid, eigenDAId, msg.sender);
         datasetCount++;
     }
