@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import axios from "axios";
-import { RainbowKitProvider, getDefaultConfig } from "@rainbow-me/rainbowkit";
+import { RainbowKitProvider, ConnectButton, getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { WagmiProvider } from "wagmi";
 import { sepolia } from "wagmi/chains";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
@@ -78,7 +78,7 @@ export default function Home() {
               <h1 className="text-2xl text-cyan-400 mb-4 font-bold">Data Doc</h1>
 
               <div className="mb-6 flex justify-end">
-                <w3m-button />
+                <ConnectButton />
               </div>
 
               <div className="mb-4">
