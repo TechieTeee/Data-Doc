@@ -13,6 +13,7 @@
     "@web3-storage/w3": "^2.8.0",
     "@web3-storage/w3up-client": "^17.2.0",
     "axios": "^1.8.4",
+    "buffer": "^6.0.3",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
     "dotenv": "^16.5.0",
