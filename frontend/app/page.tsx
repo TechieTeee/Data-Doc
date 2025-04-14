@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { RainbowKitProvider, ConnectButton, getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { WagmiProvider } from "wagmi";
@@ -33,11 +33,118 @@ type ErrorResult = {
   details: string;
 };
 
+// Confetti particle configuration
+type Particle = {
+  x: number;
+  y: number;
+  color: string;
+  size: number;
+  velocity: {
+    x: number;
+    y: number;
+  };
+  gravity: number;
+  rotation: number;
+  rotationSpeed: number;
+};
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<UploadResult | ErrorResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+  
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const particlesRef = useRef<Particle[]>([]);
+  const animationFrameRef = useRef<number | null>(null);
+
+  // Initialize confetti animation
+  useEffect(() => {
+    if (showConfetti) {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
+      // Set canvas size to window size
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      
+      // Create particles
+      const particles: Particle[] = [];
+      const colors = ['#00DDFF', '#0088FF', '#8860D0', '#5AB9EA', '#84CEEB', '#C1C8E4'];
+      
+      for (let i = 0; i < 150; i++) {
+        particles.push({
+          x: canvas.width / 2,
+          y: canvas.height / 2,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          size: Math.random() * 8 + 4,
+          velocity: {
+            x: (Math.random() - 0.5) * 15,
+            y: (Math.random() - 0.5) * 15
+          },
+          gravity: 0.1 + Math.random() * 0.1,
+          rotation: Math.random() * 360,
+          rotationSpeed: (Math.random() - 0.5) * 2
+        });
+      }
+      
+      particlesRef.current = particles;
+      
+      // Animation loop
+      let start = Date.now();
+      const animate = () => {
+        const elapsed = Date.now() - start;
+        if (elapsed > 4000) {
+          // Stop animation after 4 seconds
+          setShowConfetti(false);
+          return;
+        }
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        for (const particle of particlesRef.current) {
+          // Update position
+          particle.x += particle.velocity.x;
+          particle.y += particle.velocity.y;
+          
+          // Apply gravity
+          particle.velocity.y += particle.gravity;
+          
+          // Apply rotation
+          particle.rotation += particle.rotationSpeed;
+          
+          // Draw particle
+          ctx.save();
+          ctx.translate(particle.x, particle.y);
+          ctx.rotate((particle.rotation * Math.PI) / 180);
+          ctx.fillStyle = particle.color;
+          
+          // Make particles fade out over time
+          ctx.globalAlpha = Math.max(0, 1 - elapsed / 4000);
+          
+          // Draw square or rectangle for confetti
+          ctx.fillRect(-particle.size / 2, -particle.size / 2, particle.size, particle.size * 1.5);
+          ctx.restore();
+        }
+        
+        animationFrameRef.current = requestAnimationFrame(animate);
+      };
+      
+      // Start animation
+      animate();
+      
+      // Cleanup
+      return () => {
+        if (animationFrameRef.current) {
+          cancelAnimationFrame(animationFrameRef.current);
+        }
+      };
+    }
+  }, [showConfetti]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -90,6 +197,9 @@ export default function Home() {
         console.log("Upload response:", response.data);
         setResult(response.data as UploadResult);
         setLoading(false);
+        
+        // Trigger confetti animation on successful upload
+        setShowConfetti(true);
         return;
       } catch (error: any) {
         console.error(`Upload to ${url} failed:`, error.message, error.response?.data);
@@ -105,6 +215,9 @@ export default function Home() {
             metadataCid: "mock-metadata-QmQjP" + Date.now(),
             zkpProof: JSON.stringify({ mockProof: "zkp-mocked" }),
           });
+          
+          // Trigger confetti animation for mock success too
+          setShowConfetti(true);
         }
       }
     }
@@ -116,8 +229,16 @@ export default function Home() {
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider>
           <div className="min-h-screen bg-gradient-to-br from-gray-900 to-black text-gray-100 flex flex-col">
+            {/* Confetti Canvas (absolutely positioned over everything) */}
+            {showConfetti && (
+              <canvas 
+                ref={canvasRef}
+                className="fixed inset-0 pointer-events-none z-50"
+              />
+            )}
+            
             {/* Header */}
-            <header className="flex items-center justify-between p-4 md:p-6 bg-black/40 backdrop-blur-lg border-b border-gray-800">
+            <header className="flex items-center justify-between p-4 md:p-6 bg-black/40 backdrop-blur-lg border-b border-gray-800 z-10">
               <div className="flex items-center space-x-3">
                 <div className="relative group">
                   <div className="absolute -inset-0.5 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full opacity-70 blur-sm group-hover:opacity-100 transition duration-300"></div>
@@ -215,8 +336,22 @@ export default function Home() {
                     <div className={`px-4 py-3 ${
                       "error" in result ? "bg-red-900/30 border-l-4 border-red-500" : "bg-cyan-900/30 border-l-4 border-cyan-500"
                     }`}>
-                      <h2 className="text-lg font-bold">
-                        {"error" in result ? "Upload Failed" : "Upload Successful"}
+                      <h2 className="text-lg font-bold flex items-center">
+                        {"error" in result ? (
+                          <>
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            Upload Failed
+                          </>
+                        ) : (
+                          <>
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-cyan-400" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            Upload Successful
+                          </>
+                        )}
                       </h2>
                     </div>
 
