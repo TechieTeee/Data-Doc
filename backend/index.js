@@ -1,8 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const pinataSDK = require("@pinata/sdk");
-// Replace web3.storage with w3up-client
-const { create: createW3Client } = require("@web3-storage/w3up-client");
+const { create } = require("@web3-storage/w3up-client");
 const axios = require("axios");
 const FormData = require("form-data");
 const { ethers } = require("ethers");
@@ -18,8 +17,7 @@ const app = express();
 console.log("Env vars at startup:", {
   PINATA_API_KEY: process.env.PINATA_API_KEY ? `Present (first few chars: ${process.env.PINATA_API_KEY.substring(0, 3)}...)` : "Missing",
   PINATA_SECRET: process.env.PINATA_SECRET ? `Present (first few chars: ${process.env.PINATA_SECRET.substring(0, 3)}...)` : "Missing",
-  STORACHA_EMAIL: process.env.STORACHA_EMAIL ? `Present (${process.env.STORACHA_EMAIL})` : "Missing",
-  STORACHA_SPACE_DID: process.env.STORACHA_SPACE_DID ? "Loaded" : "Missing",
+  STORACHA_API_KEY: process.env.STORACHA_API_KEY ? `Present (first few chars: ${process.env.STORACHA_API_KEY.substring(0, 3)}...)` : "Missing",
   AKAVE_NODE_ADDRESS: process.env.AKAVE_NODE_ADDRESS ? "Loaded" : "Missing",
   ALCHEMY_API_KEY: process.env.ALCHEMY_API_KEY ? "Loaded" : "Missing",
   PRIVATE_KEY: process.env.PRIVATE_KEY ? "Loaded" : "Missing",
@@ -49,7 +47,7 @@ app.use((req, res, next) => {
 });
 
 const upload = multer({ dest: "uploads/" });
-let pinata, storachaClient;
+let pinata, storacha;
 
 try {
   if (process.env.PINATA_API_KEY && process.env.PINATA_SECRET) {
@@ -70,30 +68,20 @@ try {
   pinata = null;
 }
 
-// Initialize web3.storage client with w3up-client
-async function initStorachaClient() {
+async function initializeStoracha() {
   try {
-    if (process.env.STORACHA_EMAIL) {
-      const client = await createW3Client();
-      await client.login(process.env.STORACHA_EMAIL);
-      
-      // If a space DID is provided, use it
-      if (process.env.STORACHA_SPACE_DID) {
-        await client.setCurrentSpace(process.env.STORACHA_SPACE_DID);
-      }
-      
-      console.log("Storacha w3up-client initialized and authenticated");
-      return client;
+    if (process.env.STORACHA_API_KEY) {
+      storacha = await create();
+      console.log("Storacha w3up client initialized");
+      return storacha;
+    } else {
+      console.log("Storacha API key missing, skipping Storacha");
     }
-    return null;
   } catch (error) {
     console.error("Storacha init failed:", error.message);
     return null;
   }
 }
-
-// Initialize the Storacha client - we'll do this asynchronously
-let storachaClientPromise = initStorachaClient();
 
 let akaveApi;
 if (process.env.AKAVE_NODE_ADDRESS) {
@@ -199,149 +187,150 @@ async function generateZKP(datasetHash, uploaderKey) {
   }
 }
 
-app.get("/", async (req, res) => {
-  const client = await storachaClientPromise;
+app.get("/", (req, res) => {
   res.json({ 
     status: "Backend running", 
     features: {
       pinata: !!pinata,
-      storacha: !!client,
+      storacha: !!storacha,
       akave: !!akaveApi,
       blockchain: !!provider
     }
   });
 });
 
-app.post("/upload", upload.single("dataset"), async (req, res) => {
-  console.log("Upload request received:", req.file, req.body);
-  try {
-    if (!req.file) {
-      console.error("No file uploaded");
-      return res.status(400).json({ error: "No file uploaded" });
-    }
-    if (!fs.existsSync(req.file.path)) {
-      console.error(`File not found at path: ${req.file.path}`);
-      return res.status(400).json({ error: "Uploaded file not found on server" });
-    }
-    console.log(`File size: ${fs.statSync(req.file.path).size} bytes`);
+// Initialize Storacha before starting server
+initializeStoracha().then((client) => {
+  storacha = client;
 
-    let ipfsCid = "pinata-not-used";
-    let storachaCid = "storacha-not-used";
-    let akaveCid = "akave-not-used";
-    let metadataCid = "metadata-not-used";
-
-    if (pinata) {
-      try {
-        console.log("Pinata upload attempt with credentials:", {
-          apiKey: process.env.PINATA_API_KEY ? "Present" : "Missing",
-          secret: process.env.PINATA_SECRET ? "Present" : "Missing"
-        });
-        const readableStreamForFile = fs.createReadStream(req.file.path);
-        const pinataOptions = { pinataMetadata: { name: req.file.originalname || 'dataset.csv' } };
-        console.log("Calling pinFileToIPFS...");
-        const pinataResult = await pinata.pinFileToIPFS(readableStreamForFile, pinataOptions);
-        ipfsCid = pinataResult.IpfsHash || pinataResult.ipfsHash;
-        console.log("Pinned to IPFS:", ipfsCid);
-      } catch (pinataError) {
-        console.error("Pinata upload failed:", pinataError.message, pinataError.stack);
-        ipfsCid = "pinata-upload-failed";
-      }
-    }
-
-    const datasetBuffer = fs.readFileSync(req.file.path);
-    const datasetHash = crypto.createHash("sha256").update(datasetBuffer).digest("hex");
-    console.log("Dataset hash:", datasetHash);
-
-    // Updated Storacha implementation
-    const client = await storachaClientPromise;
-    if (client) {
-      try {
-        console.log("Storacha upload attempt with w3up-client...");
-        const fileBlob = new Blob([datasetBuffer], { type: "text/csv" });
-        const uploadResult = await client.uploadFile(fileBlob);
-        storachaCid = uploadResult.cid.toString();
-        console.log("Uploaded to Storacha:", storachaCid);
-      } catch (storachaError) {
-        console.error("Storacha upload failed:", storachaError.message, storachaError.stack);
-        storachaCid = "storacha-upload-failed";
-      }
-    }
-
-    if (akaveApi) {
-      try {
-        akaveCid = await streamToAkave(req.file.path, req.file.originalname || 'dataset.csv');
-        console.log("Streamed to Akave:", akaveCid);
-      } catch (akaveError) {
-        console.error("Akave streaming failed:", akaveError.message);
-        akaveCid = "akave-stream-failed";
-      }
-    }
-
-    if (pinata) {
-      try {
-        const metadata = {
-          "@context": "http://schema.org",
-          "@type": "Dataset",
-          name: req.file.originalname || 'dataset.csv',
-          creator: { "@type": "Person", identifier: wallet.address },
-          datePublished: new Date().toISOString(),
-          contentHash: datasetHash,
-          ipfsCid,
-          akaveCid,
-          storachaCid,
-        };
-        const metadataResult = await pinata.pinJSONToIPFS(metadata, { 
-          pinataMetadata: { name: "dataset_metadata.json" } 
-        });
-        metadataCid = metadataResult.IpfsHash || metadataResult.ipfsHash;
-        console.log("Metadata pinned to IPFS:", metadataCid);
-      } catch (metadataError) {
-        console.error("Metadata upload failed:", metadataError.message);
-        metadataCid = "metadata-upload-failed";
-      }
-    }
-
-    const zkpProof = await generateZKP(datasetHash, process.env.PRIVATE_KEY || "0x0");
-    console.log("ZKP generated:", zkpProof);
-
-    const eigenDAId = "mock-eigenda-" + Math.floor(Math.random() * 1000);
-    const price = "1000000";
-
-    let tx;
+  app.post("/upload", upload.single("dataset"), async (req, res) => {
+    console.log("Upload request received:", req.file, req.body);
     try {
-      console.log("Sending to contract:", { ipfsCid, eigenDAId, price, zkpProof: "proof-object", metadataCid });
-      tx = await contract.addDataset(ipfsCid, eigenDAId, price, zkpProof, metadataCid);
-      console.log("Transaction sent:", tx.hash);
-      await tx.wait();
-      console.log("Transaction confirmed");
-    } catch (contractError) {
-      console.error("Contract interaction failed:", contractError.message);
+      if (!req.file) {
+        console.error("No file uploaded");
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+      if (!fs.existsSync(req.file.path)) {
+        console.error(`File not found at path: ${req.file.path}`);
+        return res.status(400).json({ error: "Uploaded file not found on server" });
+      }
+      console.log(`File size: ${fs.statSync(req.file.path).size} bytes`);
+
+      let ipfsCid = "pinata-not-used";
+      let storachaCid = "storacha-not-used";
+      let akaveCid = "akave-not-used";
+      let metadataCid = "metadata-not-used";
+
+      if (pinata) {
+        try {
+          console.log("Pinata upload attempt with credentials:", {
+            apiKey: process.env.PINATA_API_KEY ? "Present" : "Missing",
+            secret: process.env.PINATA_SECRET ? "Present" : "Missing"
+          });
+          const readableStreamForFile = fs.createReadStream(req.file.path);
+          const pinataOptions = { pinataMetadata: { name: req.file.originalname || 'dataset.csv' } };
+          console.log("Calling pinFileToIPFS...");
+          const pinataResult = await pinata.pinFileToIPFS(readableStreamForFile, pinataOptions);
+          ipfsCid = pinataResult.IpfsHash || pinataResult.ipfsHash;
+          console.log("Pinned to IPFS:", ipfsCid);
+        } catch (pinataError) {
+          console.error("Pinata upload failed:", pinataError.message, pinataError.stack);
+          ipfsCid = "pinata-upload-failed";
+        }
+      }
+
+      const datasetBuffer = fs.readFileSync(req.file.path);
+      const datasetHash = crypto.createHash("sha256").update(datasetBuffer).digest("hex");
+      console.log("Dataset hash:", datasetHash);
+
+      if (storacha) {
+        try {
+          console.log("Storacha upload attempt with w3up client");
+          const file = new File([datasetBuffer], req.file.originalname || 'dataset.csv', { type: "text/csv" });
+          storachaCid = await storacha.uploadFile(file);
+          console.log("Uploaded to Storacha:", storachaCid.toString());
+        } catch (storachaError) {
+          console.error("Storacha upload failed:", storachaError.message, storachaError.stack);
+          storachaCid = "storacha-upload-failed";
+        }
+      }
+
+      if (akaveApi) {
+        try {
+          akaveCid = await streamToAkave(req.file.path, req.file.originalname || 'dataset.csv');
+          console.log("Streamed to Akave:", akaveCid);
+        } catch (akaveError) {
+          console.error("Akave streaming failed:", akaveError.message);
+          akaveCid = "akave-stream-failed";
+        }
+      }
+
+      if (pinata) {
+        try {
+          const metadata = {
+            "@context": "http://schema.org",
+            "@type": "Dataset",
+            name: req.file.originalname || 'dataset.csv',
+            creator: { "@type": "Person", identifier: wallet.address },
+            datePublished: new Date().toISOString(),
+            contentHash: datasetHash,
+            ipfsCid,
+            akaveCid,
+            storachaCid,
+          };
+          const metadataResult = await pinata.pinJSONToIPFS(metadata, { 
+            pinataMetadata: { name: "dataset_metadata.json" } 
+          });
+          metadataCid = metadataResult.IpfsHash || metadataResult.ipfsHash;
+          console.log("Metadata pinned to IPFS:", metadataCid);
+        } catch (metadataError) {
+          console.error("Metadata upload failed:", metadataError.message);
+          metadataCid = "metadata-upload-failed";
+        }
+      }
+
+      const zkpProof = await generateZKP(datasetHash, process.env.PRIVATE_KEY || "0x0");
+      console.log("ZKP generated:", zkpProof);
+
+      const eigenDAId = "mock-eigenda-" + Math.floor(Math.random() * 1000);
+      const price = "1000000";
+
+      let tx;
+      try {
+        console.log("Sending to contract:", { ipfsCid, eigenDAId, price, zkpProof: "proof-object", metadataCid });
+        tx = await contract.addDataset(ipfsCid, eigenDAId, price, zkpProof, metadataCid);
+        console.log("Transaction sent:", tx.hash);
+        await tx.wait();
+        console.log("Transaction confirmed");
+      } catch (contractError) {
+        console.error("Contract interaction failed:", contractError.message);
+      }
+
+      const datasetCount = await contract.datasetCount().catch(() => 0);
+      const datasetId = Number(datasetCount) - 1;
+
+      try {
+        fs.unlinkSync(req.file.path);
+        console.log("Cleaned up uploaded file");
+      } catch (cleanupError) {
+        console.error("Failed to clean up file:", cleanupError);
+      }
+
+      res.json({
+        ipfsCid,
+        akaveCid,
+        storachaCid,
+        eigenDAId,
+        datasetId: datasetId.toString(),
+        transactionHash: tx?.hash || "none",
+        metadataCid,
+        zkpProof
+      });
+    } catch (error) {
+      console.error("Upload error:", error.message, error.stack);
+      res.status(500).json({ error: "Upload failed", details: error.message });
     }
+  });
 
-    const datasetCount = await contract.datasetCount().catch(() => 0);
-    const datasetId = Number(datasetCount) - 1;
-
-    try {
-      fs.unlinkSync(req.file.path);
-      console.log("Cleaned up uploaded file");
-    } catch (cleanupError) {
-      console.error("Failed to clean up file:", cleanupError);
-    }
-
-    res.json({
-      ipfsCid,
-      akaveCid,
-      storachaCid,
-      eigenDAId,
-      datasetId: datasetId.toString(),
-      transactionHash: tx?.hash || "none",
-      metadataCid,
-      zkpProof
-    });
-  } catch (error) {
-    console.error("Upload error:", error.message, error.stack);
-    res.status(500).json({ error: "Upload failed", details: error.message });
-  }
+  app.listen(3001, () => console.log("Backend listening on http://localhost:3001"));
 });
-
-app.listen(3001, () => console.log("Backend listening on http://localhost:3001"));
