@@ -394,7 +394,7 @@ export default function Home() {
             
             {/* Footer */}
             <footer className="py-4 text-center text-gray-500 text-sm">
-              <p>Secure decentralized data storage powered by Data Doc</p>
+              <p>Decentralized Data for Humanity powered by Data Doc</p>
             </footer>
           </div>
         </RainbowKitProvider>
