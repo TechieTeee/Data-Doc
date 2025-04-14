@@ -54,7 +54,7 @@ export default function Home() {
     try {
       const response = await axios.post("http://localhost:3001/upload", formData, {
         headers: { "Content-Type": "multipart/form-data" },
-        timeout: 30000,
+        timeout: 120000,
       });
       console.log("Upload response:", response.data);
       setResult(response.data as UploadResult);
