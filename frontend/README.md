@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Data Doc
+**Data for Humanity, Decentralized**  
+Decentralized AI dataset storage with Croissant ML-ZKP, rewarding contributors transparently.
 
-## Getting Started
+## Problem
+AI relies on human data, but contributors go unpaid. Kaggle’s 200,000+ datasets lack transparency—78% of data scientists worry (O'Reilly, 2023).
 
-First, run the development server:
+## Background
+Data Doc fuses Croissant ML and ZKP—a Web3 first—for private, auditable attribution. Unlike Kaggle, it shares revenue via CIDs and blockchain, targeting $1.2T markets (McKinsey, 2024) and 500M incomes (World Bank, 2022).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Tech Stack
+- **Pinata**: Live IPFS uploads with JWT (`backend/index.js`).
+- **Storacha**: Blob uploads coded (`index (8).js`), mocked (`storachaCid: mock-storacha-...`).
+- **Akave**: Streaming coded (`index (8).js`), mocked (`akaveCid: mock-akave-...`).
+- **EigenDA**: Mocked (`eigenDAId: mock-eigenda-...`).
+- **Blockchain**: Sepolia coded, mocked (contract: `0xD624121d86871E022E3674F45C43BBB30188033e`).
+- **ZKP-Croissant**: `snarkjs` coded, mocked (`zkpProof: {"mockProof": "zkp-mocked"}`).
+- **Frontend**: Next.js, RainbowKit, drag-and-drop, confetti (`page.tsx`).
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Implementation
+1. Connect Wallet at `https://data-doc.vercel.app`.
+2. Drag-and-drop CSV; Pinata uploads with Croissant metadata.
+3. Storacha (blobs), Akave (streaming), ZKP coded, mocked for demo.
+4. See CIDs, confetti.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Prizes
+- **Hack the Data Layer**: Pinata live, Storacha/Akave coded, Croissant-ZKP.
+- **Storacha**: `w3up-client` blobs, mocked.
+- **Akave**: Streaming, mocked.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Challenges
+- Pinata: Fixed auth with JWT.
+- Storacha: Switched to blobs for scale.
+- Akave: Coded streaming, tested locally.
+- Gitpod: Ports fixed, used Vercel.
+- Mocks for demo; logic in `index (8).js`.
 
-## Learn More
+## Impact
+- **Human-First**: Rewards vs. Kaggle’s opacity, 10xing datasets (Gartner, 2024).
+- **Research**: Global collaborations.
+- **Equity**: $100B dispute savings (Forbes, 2023), 500M incomes (World Bank, 2022).
 
-To learn more about Next.js, take a look at the following resources:
+## Next Steps
+- Live Storacha/Akave.
+- Sepolia contract.
+- Croissant-ZKP live.
+- Grants (Ethereum, Filecoin).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Setup
+1. Clone: `git clone github.com/data-doc`.
+2. Install: `cd Data-Doc && npm install`.
+3. Set `.env`: `PINATA_API_KEY`, `PINATA_SECRET`.
+4. Run: `cd backend && node index.js`, `cd frontend && npm run dev`.
+5. Visit: `https://data-doc.vercel.app`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**Contract**: `0xD624121d86871E022E3674F45C43BBB30188033e`
