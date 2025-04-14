@@ -35,8 +35,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// Updated CORS configuration
 app.use(cors({
-  origin: ["https://3000-techieteee-datadoc-0jtulr7q8pd.ws-us118.gitpod.io", "http://localhost:3000", "*"],
+  origin: (origin, callback) => {
+    callback(null, true); // Allow any origin
+  },
   methods: ["GET", "POST"],
   allowedHeaders: ["Content-Type", "X-Gitpod-Workspace-Auth"],
   credentials: true
@@ -48,7 +51,12 @@ app.use((req, res, next) => {
   next();
 });
 
-const upload = multer({ dest: "uploads/" });
+// Updated multer configuration with file size limit
+const upload = multer({ 
+  dest: "uploads/",
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+});
+
 let pinata, storachaClientPromise;
 
 try {
@@ -223,9 +231,87 @@ app.get("/", (req, res) => {
   });
 });
 
+// New health check endpoint
+app.get("/health", async (req, res) => {
+  const health = {
+    server: "running",
+    pinata: "not_checked",
+    storacha: "not_checked",
+    akave: "not_checked",
+    blockchain: "not_checked"
+  };
+  
+  // Check Pinata
+  if (pinata) {
+    try {
+      await pinata.testAuthentication();
+      health.pinata = "connected";
+    } catch (error) {
+      health.pinata = `error: ${error.message}`;
+    }
+  }
+  
+  // Check blockchain connection
+  try {
+    const network = await provider.getNetwork();
+    health.blockchain = `connected to ${network.name}`;
+  } catch (error) {
+    health.blockchain = `error: ${error.message}`;
+  }
+  
+  // Check Akave
+  if (akaveApi) {
+    try {
+      await akaveApi.get("/health");
+      health.akave = "connected";
+    } catch (error) {
+      health.akave = `error: ${error.message}`;
+    }
+  }
+  
+  // Check Storacha
+  const client = await storachaClientPromise;
+  if (client) {
+    health.storacha = "connected";
+  }
+  
+  res.json(health);
+});
+
+// Simple test endpoint
+app.post("/test-file", upload.single("testfile"), (req, res) => {
+  console.log("Test file received:", req.file);
+  res.json({ success: true, file: req.file ? req.file.originalname : "none" });
+});
+
 // Initialize Storacha before starting server
 storachaClientPromise = initStorachaClient();
 
+// Simplified upload endpoint for testing
+app.post("/upload-test", upload.single("dataset"), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+    
+    // Just respond with the file info
+    res.json({ 
+      status: "success", 
+      file: {
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        path: req.file.path
+      }
+    });
+    
+  } catch (error) {
+    console.error("Simple upload test error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Main upload endpoint with improved error handling
 app.post("/upload", upload.single("dataset"), async (req, res) => {
   console.log("Upload request received:", req.file, req.body);
   try {
@@ -354,7 +440,20 @@ app.post("/upload", upload.single("dataset"), async (req, res) => {
     });
   } catch (error) {
     console.error("Upload error:", error.message, error.stack);
-    res.status(500).json({ error: "Upload failed", details: error.message });
+    
+    // More detailed error response
+    let errorDetails = error.message;
+    if (error.code === 'ECONNREFUSED') {
+      errorDetails = 'Connection to a required service failed. Check that all services are running.';
+    } else if (error.code === 'ENOENT') {
+      errorDetails = 'A required file was not found.';
+    }
+    
+    res.status(500).json({ 
+      error: "Upload failed", 
+      details: errorDetails,
+      code: error.code || 'UNKNOWN'
+    });
   }
 });
 
